@@ -1,24 +1,33 @@
-use std::{collections::HashMap, fs::{self, File}, hash::Hash, io::{BufReader, Read, Write}, path::PathBuf};
+use std::{io::{self, Read, Write}, net::TcpStream};
 
-use axum::{extract::{path, Path, Query}, http::StatusCode, response::{Html, IntoResponse}, routing::get, Router};
-use tokio::io::AsyncReadExt;
+use native_tls::TlsConnector;
 
-mod gemini;
-mod utils;
-mod browser;
+fn client_build_request_str(uri: &str) -> String {
+    format!("{}\r\n", uri)
+}
 
-#[tokio::main]
-async fn main() {
+fn main() -> io::Result<()> {
+    let addr = "geminiprotocol.net:1965";
+    let uri = "gemini://geminiprotocol.net/";
 
-    // Load the HTTP frontend
-    let app = Router::new()
-        .route("/", get(browser::get_homepage))
-        .route("/:protocol/*address", get(browser::get_webpage))
-        .route("/static/*resource", get(browser::get_html_resource));
+    let stream = TcpStream::connect(addr)?;
     
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:1965").await.unwrap();
-    println!("Client running on http://localhost:1965. Kill me with CTRL-C.");
-    axum::serve(listener, app).await.unwrap(); 
-    // blocks forever
+    // All gemini communication uses TLS.
+    // TODO: Implement TOFU and store certs in ~/.dioscuri
+    //       TOFU module should handle all cert handlers
+    let connector = TlsConnector::builder()
+    .danger_accept_invalid_certs(true)
+    .build()
+    .unwrap();
 
+    let mut stream = connector.connect("geminiprotocol.net", stream).unwrap();
+
+    let request = client_build_request_str(uri);
+    let _ = stream.write_all(request.as_bytes())?;
+
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+
+    println!("Response:\n{}", response);
+    Ok(())
 }
