@@ -1,0 +1,417 @@
+use std::{io::{Read, Write}, net::TcpStream};
+
+use native_tls::TlsConnector;
+use url::form_urlencoded;
+
+/// This file implements the Gemini protocol
+/// It takes in a url/uri and returns either (data, status code) or an error string.
+
+use crate::tofu_handle_certificate;
+
+const CRLF: &str = "\r\n";
+
+#[derive(Debug, PartialEq)] // allow debug and comparisons
+pub enum StatusCode {
+    InputExpected,
+    InputSensitive,
+    Success,
+    RedirectTemp,
+    RedirectPerm,
+    FailureServerTemp,
+    FailureServerUnavailable,
+    FailureServerCgiError,
+    FailureServerProxyError,
+    FailureServerSlowdown,
+    FailureServer,
+    FailureServerNotfound,
+    FailureServerGone,
+    FailureServerProxyrefused,
+    FailureServerBadReq,
+    FailureCertNeeded,
+    FailureCertUnauthorized,
+    FailureCertInvalid,
+    StatusUnknown,
+    FailureClient,
+    ResponseError,
+}
+
+impl From<i32> for StatusCode {
+    fn from(code: i32) -> Self {
+        match code {
+            10 => StatusCode::InputExpected,
+            11 => StatusCode::InputSensitive,
+            12..=19 => StatusCode::InputExpected,
+            20..=29 => StatusCode::Success,
+            30 => StatusCode::RedirectTemp,
+            31 => StatusCode::RedirectPerm,
+            32..=39 => StatusCode::RedirectPerm,
+            40 => StatusCode::FailureServerTemp,
+            41 => StatusCode::FailureServerUnavailable,
+            42 => StatusCode::FailureServerCgiError,
+            43 => StatusCode::FailureServerProxyError,
+            44 => StatusCode::FailureServerSlowdown,
+            45..=49 => StatusCode::FailureServerTemp,
+            50 => StatusCode::FailureServer,
+            51 => StatusCode::FailureServerNotfound,
+            52 => StatusCode::FailureServerGone,
+            53 => StatusCode::FailureServerProxyrefused,
+            54..=58 => StatusCode::FailureServer,
+            59 => StatusCode::FailureServerBadReq,
+            60 => StatusCode::FailureCertNeeded,
+            61 => StatusCode::FailureCertUnauthorized,
+            62 => StatusCode::FailureCertInvalid,
+            63..=69 => StatusCode::FailureCertNeeded,
+            _ => StatusCode::StatusUnknown
+        }
+    }
+
+}
+
+
+/// Given a url of format(s):
+/// 1. {protocol}://address/*
+/// 2. address/*
+/// 
+/// return only the 'address/*' part
+fn _strip_protocol_from_url(url: &String) -> String {
+    let mut temp_url = url.clone();
+    // 1. Check if the URL starts with a protocol (e.g., "http://", "gemini://").
+    // If it does, remove the protocol and the "://" part.
+    if let Some(protocol_end_idx) = temp_url.find("://") {
+        // We add 3 to the index to skip "://"
+        temp_url = temp_url[(protocol_end_idx + 3)..].to_string();
+    }
+    temp_url
+}
+/// Given a url of format(s):
+/// 1. {protocol}://address/*  
+/// 2. address/* 
+///  
+/// Extract 'address' and return it as a String
+fn _extract_address_from_url(url: &String) -> String {
+    let temp_url = _strip_protocol_from_url(url);
+
+    // Find the index of the first slash '/' in the remaining string.
+    // The address part will be the substring before this slash.
+    if let Some(slash_idx) = temp_url.find('/') {
+        // Return the substring from the beginning of temp_url up to the first slash.
+        temp_url[..slash_idx].to_string()
+    } else {
+        temp_url
+    }
+}
+
+/// Given a response payload, extract the response code, header message and body
+fn extract_response_header(response: String) -> (StatusCode, String, String) {
+    let (header_line, body) = match response.split_once(CRLF) {
+        Some((h, b)) => (h, b.to_string()), // Body can be multi-line
+        None => {
+            // If no CRLF, the response format is invalid.
+            return (StatusCode::ResponseError, "Response does not have CRLF!".to_string(), "".to_string());
+        }
+    };
+
+    // Process the header line
+    let (code_str, header_message_str) = match header_line.split_once(" ") {
+        Some((code_part, message_part)) => (code_part, message_part),
+        None => {
+            // If no space is found, the entire header_line is considered the code string,
+            // and the header message is empty. This handles cases like "41\r\n".
+            (header_line, "")
+        }
+    };
+
+    // Ensure that the status code is precisely 2 digits
+    if code_str.len() != 2 {
+        return (StatusCode::StatusUnknown, "Server returned invalid status code!".to_string(), "".to_string());
+    }
+    let code_parsed = code_str.parse::<i32>();
+    if code_parsed.is_err() {
+        // invalid parse (non numeric)
+        return (StatusCode::StatusUnknown, "Server returned invalid status code!".to_string(), "".to_string());
+    }   
+    let code_num = code_parsed.unwrap();
+    if code_num < 10 || code_num > 69 {
+        // status code not within 10 and 69 (undefined based on specs)
+        return (StatusCode::StatusUnknown, "Server returned invalid status code!".to_string(), "".to_string());
+    }
+    let status = StatusCode::from(code_num);
+
+    return (status, header_message_str.to_string(), body);
+}
+
+/// Return the uri but with \r\n appended
+fn client_build_request_str(uri: String) -> String {
+    format!("{}\r\n", uri)
+}
+
+/// Given a url, get the corresponding (code, header_data, data) tuple
+/// The url string can be of format: gemini://{url} or simply {url}
+/// Any client-side internal errors will be returned with the appropriate status code.
+fn get_gemini(url: String) -> (StatusCode, String, String){
+    // Extract out the domain/address, port and uri
+    let port = 1965;
+    let addr = format!("{}:{}", _extract_address_from_url(&url), port);
+    let conn_res =  TcpStream::connect(&addr);
+    if conn_res.is_err() {
+        return (StatusCode::FailureClient, "".to_string(), "TcpStream failed to connect".to_string())
+    }
+    let stream = conn_res.unwrap();
+    let url_stripped = _strip_protocol_from_url(&url);
+    let uri: String = form_urlencoded::byte_serialize(url_stripped.as_bytes()).collect();
+
+    // All gemini communication uses TLS
+    // Given uri and addr, we can connect securely via TLS
+    let connector = TlsConnector::builder()
+    .danger_accept_invalid_certs(true)
+    .build()
+    .unwrap();
+
+    let mut stream = connector.connect(&addr, stream).unwrap();
+    let _ = tofu_handle_certificate(stream.peer_certificate().unwrap().unwrap());
+    let request = client_build_request_str(uri);
+    if let Err(e) = stream.write_all(request.as_bytes()) {
+        return (StatusCode::FailureClient, "".to_string(), format!("Error while writing to TLS stream!\n{}", e).to_string())
+    }
+
+    let mut response = String::new();
+    if let Err(e) = stream.read_to_string(&mut response) {
+        return (StatusCode::FailureClient, "".to_string(), format!("Error while reading from TLS stream!\n{}", e).to_string())
+    }
+    // No issue with the response.
+    let (code, header, body) = extract_response_header(response);
+
+    return (code, header, body);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_address_extraction() {
+        let in0 = "https://foobar.com";
+        let out0 = "foobar.com";
+        let in1 = "gemini://my-website.com/nonsense?ok";
+        let out1 = "my-website.com"; 
+        let in2 = "google.com";
+        let out2 = "google.com";
+        assert_eq!(_extract_address_from_url(&in0.to_string()), out0);
+        assert_eq!(_extract_address_from_url(&in1.to_string()), out1);
+        assert_eq!(_extract_address_from_url(&in2.to_string()), out2);
+    }
+
+    #[test]
+    fn test_get_gemini_invalid_domain() {
+        let (code, _, _) = get_gemini("this_website_does_not_exist_999.au".to_string());
+        assert_eq!(code, StatusCode::FailureClient)
+    }
+
+    #[test]
+    /// Test the 1* series of responses
+    fn test_extract_response_header_10s() {
+        let in0 = "10 What is the answer? To life, the universe\n and everything? \r\n".to_string();
+        let out0 = (StatusCode::from(10), 
+            "What is the answer? To life, the universe\n and everything? ".to_string(), "".to_string());
+        assert_eq!(out0, extract_response_header(in0));
+
+        let in1 = "11 P4$$w0rd\npl0x~\r\n".to_string();
+        let out1 = (StatusCode::from(11),
+            "P4$$w0rd\npl0x~".to_string(), "".to_string());
+        assert_eq!(out1, extract_response_header(in1));
+        
+        let in2 = "12 foo\r\n".to_string();
+        let out2 = (StatusCode::from(12),
+            "foo".to_string(), "".to_string());
+        assert_eq!(out2, extract_response_header(in2));
+    }
+
+    #[test]
+    /// Test the 2* series of reponses
+    fn test_extract_response_header_20s() {
+        let in0 = "20 text/html\r\n Hello-!\nWorld\r\n1234#!\";;".to_string();
+        let out0 = (StatusCode::from(20),
+            "text/html".to_string(), " Hello-!\nWorld\r\n1234#!\";;".to_string());
+        assert_eq!(out0, extract_response_header(in0));
+
+        let in1 = "29 some/meme\r\noiiaioiiiai\r".to_string();
+        let out1 = (StatusCode::from(29),
+            "some/meme".to_string(),"oiiaioiiiai\r".to_string());
+        assert_eq!(out1, extract_response_header(in1));
+    }
+
+    #[test]
+    /// Test the 3* series of responses
+    fn test_extract_response_header_30s() {
+        // Test case for 30
+        let in0 = "30 gemini://example.com/new/path\r\n".to_string();
+        let out0 = (StatusCode::from(30),
+                    "gemini://example.com/new/path".to_string(),
+                    "".to_string()); // Body should be empty for redirects
+        assert_eq!(out0, extract_response_header(in0));
+
+        // Test case for 31 (Permanent redirect)
+        let in1 = "31 /local/resource\r\n".to_string();
+        let out1 = (StatusCode::from(31),
+                    "/local/resource".to_string(),
+                    "".to_string());
+        assert_eq!(out1, extract_response_header(in1));
+
+        // Test case for 32 (Temporary redirect with a more complex URI-reference)
+        let in2 = "32 gemini://mirror.gmi/path?query=1&frag#section\r\n".to_string();
+        let out2 = (StatusCode::from(32),
+                    "gemini://mirror.gmi/path?query=1&frag#section".to_string(),
+                    "".to_string());
+        assert_eq!(out2, extract_response_header(in2));
+
+        // Test case for 39 (General 3x response with a simple path)
+        let in3 = "39 /another/place\r\n".to_string();
+        let out3 = (StatusCode::from(39),
+                    "/another/place".to_string(),
+                    "".to_string());
+        assert_eq!(out3, extract_response_header(in3));
+
+        // Edge case: URI-reference with special characters that are still valid
+        let in4 = "30 /some/path with spaces/and!symbols.gmi\r\n".to_string();
+        let out4 = (StatusCode::from(30),
+                    "/some/path with spaces/and!symbols.gmi".to_string(),
+                    "".to_string());
+        assert_eq!(out4, extract_response_header(in4));
+    }
+
+    #[test]
+    /// Test the 4* series of responses
+    fn test_extract_response_header_40s() {
+        // Test case for 40 with an error message
+        let in0 = "40 Service Unavailable\r\n".to_string();
+        let out0 = (StatusCode::from(40),
+                    "Service Unavailable".to_string(),
+                    "".to_string());
+        assert_eq!(out0, extract_response_header(in0));
+
+        // Test case for 41 without an error message
+        let in1 = "41\r\n".to_string();
+        let out1 = (StatusCode::from(41),
+                    "".to_string(), // Error message is empty
+                    "".to_string());
+        assert_eq!(out1, extract_response_header(in1));
+
+        // Test case for 42 
+        let in2 = "42 CGI error~\r\n".to_string();
+        let out2 = (StatusCode::from(42),
+                    "CGI error~".to_string(),
+                    "".to_string());
+        assert_eq!(out2, extract_response_header(in2));
+
+        // Test case for 43
+        let in3 = "43 Prox failed(cf http 502,504)\r\n".to_string();
+        let out3 = (StatusCode::from(43),
+                    "Prox failed(cf http 502,504)".to_string(),
+                    "".to_string());
+        assert_eq!(out3, extract_response_header(in3));
+
+        // Test case for 44
+        let in4 = "44 SLOW DOWN!\r\n".to_string();
+        let out4 = (StatusCode::from(44),
+                    "SLOW DOWN!".to_string(),
+                    "".to_string());
+        assert_eq!(out4, extract_response_header(in4));
+
+        // Test case for 49 with a more specific error message
+        let in5 = "49 Rate Limit Exceeded: Try again in 60s\r\n".to_string();
+        let out5 = (StatusCode::from(49),
+                    "Rate Limit Exceeded: Try again in 60s".to_string(),
+                    "".to_string());
+        assert_eq!(out5, extract_response_header(in5));
+    }
+
+    #[test]
+    /// Test the 5* series of responsese
+    fn test_extract_response_header_50s() {
+        // Test case for 50 with an error message
+        let in0 = "50 Not Found\r\n".to_string();
+        let out0 = (StatusCode::from(50),
+                    "Not Found".to_string(),
+                    "".to_string());
+        assert_eq!(out0, extract_response_header(in0));
+
+        // Test case for 51 with an error message
+        let in1 = "51 Bad Request\r\n".to_string();
+        let out1 = (StatusCode::from(51),
+                    "Bad Request".to_string(),
+                    "".to_string());
+        assert_eq!(out1, extract_response_header(in1));
+
+        // Test case for 59 without an error message
+        let in2 = "59\r\n".to_string();
+        let out2 = (StatusCode::from(59),
+                    "".to_string(),
+                    "".to_string());
+        assert_eq!(out2, extract_response_header(in2));
+    }
+
+    #[test]
+    /// Test the 6* series of responses
+    fn test_extract_response_header_60s() {
+        // Test case for 60 with an error message
+        let in0 = "60 Authentication Required\r\n".to_string();
+        let out0 = (StatusCode::from(60),
+                    "Authentication Required".to_string(),
+                    "".to_string());
+        assert_eq!(out0, extract_response_header(in0));
+
+        // Test case for 61 with an error message
+        let in1 = "61 Invalid Client Certificate\r\n".to_string();
+        let out1 = (StatusCode::from(61),
+                    "Invalid Client Certificate".to_string(),
+                    "".to_string());
+        assert_eq!(out1, extract_response_header(in1));
+
+        // Test case for 69 without an error message
+        let in2 = "69\r\n".to_string();
+        let out2 = (StatusCode::from(69),
+                    "".to_string(),
+                    "".to_string());
+        assert_eq!(out2, extract_response_header(in2));
+    }
+
+    #[test]
+    /// Test that status codes from non [1*, 6*] are handled correctly 
+    fn test_extract_response_header_unknown_statuscode() {
+        let in0 = "71\r\n".to_string();
+        let out0 = (StatusCode::from(71),
+                    "Server returned invalid status code!".to_string(),
+                    "".to_string());
+        assert_eq!(out0, extract_response_header(in0));
+
+        let in1 = "84 Hello there!\r\n".to_string();
+        let out1 = (StatusCode::from(84),
+                    "Server returned invalid status code!".to_string(),
+                    "".to_string());
+        assert_eq!(out1, extract_response_header(in1));
+
+        let in2 = "99 Brooklyn\r\nCool, cool, cool, cool, cool. No doubt, no doubt, no doubt.".to_string();
+        let out2 = (StatusCode::from(84),
+                    "Server returned invalid status code!".to_string(),
+                    "".to_string());
+        assert_eq!(out2, extract_response_header(in2));
+
+        let in3 = "123 Richard\r\nStallman".to_string();
+        let out3 = (StatusCode::from(84),
+                    "Server returned invalid status code!".to_string(),
+                    "".to_string());
+        assert_eq!(out3, extract_response_header(in3));
+
+        let in4 = "5 Richard\r\nStallman".to_string();
+        let out4 = (StatusCode::StatusUnknown,
+                    "Server returned invalid status code!".to_string(),
+                    "".to_string());
+        assert_eq!(out4, extract_response_header(in4));
+
+        let in5 = "-6 Edgar\r\nDijkstra".to_string();
+        let out5 = (StatusCode::StatusUnknown,
+                    "Server returned invalid status code!".to_string(),
+                    "".to_string());
+        assert_eq!(out5, extract_response_header(in5));
+    }
+
+}
