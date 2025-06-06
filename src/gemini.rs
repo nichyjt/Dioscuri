@@ -3,10 +3,10 @@ use std::{io::{Read, Write}, net::TcpStream};
 use native_tls::TlsConnector;
 use url::form_urlencoded;
 
+use crate::tofu;
+
 /// This file implements the Gemini protocol
 /// It takes in a url/uri and returns either (data, status code) or an error string.
-
-use crate::tofu_handle_certificate;
 
 const CRLF: &str = "\r\n";
 
@@ -101,6 +101,28 @@ fn _extract_address_from_url(url: &String) -> String {
     }
 }
 
+/// Given a string of format:
+/// {foo}/{bar}/{baz}
+/// urlencode baz and return 
+/// {foo}/{bar}/{baz'}, where baz' is the urlencoded slug
+fn encode_url_suffix(path_str: String) -> String {
+    let (prefix_slice, baz_slice) = if let Some(last_slash_idx) = path_str.rfind('/') {
+        // If a slash is found, split into the part before it and the part after it.
+        // `last_slash_idx + 1` ensures we start after the slash for `baz_slice`.
+        (&path_str[..last_slash_idx], &path_str[last_slash_idx + 1..])
+    } else {
+        // If no slash, the entire string is considered the 'baz' part, with an empty prefix.
+        ("", &path_str[..])
+    };
+    let encoded_baz: String = form_urlencoded::byte_serialize(baz_slice.as_bytes()).collect();
+    // Reconstruct the URL: "{foo}/{bar}/{baz'}"
+    if prefix_slice.is_empty() {
+        encoded_baz
+    } else {
+        format!("{}/{}", prefix_slice, encoded_baz)
+    }
+}
+
 /// Given a response payload, extract the response code, header message and body
 fn extract_response_header(response: String) -> (StatusCode, String, String) {
     let (header_line, body) = match response.split_once(CRLF) {
@@ -148,7 +170,7 @@ fn client_build_request_str(uri: String) -> String {
 /// Given a url, get the corresponding (code, header_data, data) tuple
 /// The url string can be of format: gemini://{url} or simply {url}
 /// Any client-side internal errors will be returned with the appropriate status code.
-fn get_gemini(url: String) -> (StatusCode, String, String){
+pub fn get_gemini(url: String) -> (StatusCode, String, String){
     // Extract out the domain/address, port and uri
     let port = 1965;
     let addr = format!("{}:{}", _extract_address_from_url(&url), port);
@@ -156,20 +178,23 @@ fn get_gemini(url: String) -> (StatusCode, String, String){
     if conn_res.is_err() {
         return (StatusCode::FailureClient, "".to_string(), "TcpStream failed to connect".to_string())
     }
-    let stream = conn_res.unwrap();
-    let url_stripped = _strip_protocol_from_url(&url);
-    let uri: String = form_urlencoded::byte_serialize(url_stripped.as_bytes()).collect();
-
+    
     // All gemini communication uses TLS
-    // Given uri and addr, we can connect securely via TLS
+    let stream = conn_res.unwrap();    
     let connector = TlsConnector::builder()
     .danger_accept_invalid_certs(true)
     .build()
     .unwrap();
-
     let mut stream = connector.connect(&addr, stream).unwrap();
-    let _ = tofu_handle_certificate(stream.peer_certificate().unwrap().unwrap());
-    let request = client_build_request_str(uri);
+    let _ = tofu::tofu_handle_certificate(stream.peer_certificate().unwrap().unwrap());
+
+    // Ensure all strings are stripped to maintain a standard format;
+    // then urlencode the last section,
+    // then re-insert the 'gemini://' prefix
+    let url_stripped = _strip_protocol_from_url(&url);
+    let encoded_url = encode_url_suffix(url_stripped);
+    let final_url = format!("gemini://{}", encoded_url);
+    let request = client_build_request_str(final_url);
     if let Err(e) = stream.write_all(request.as_bytes()) {
         return (StatusCode::FailureClient, "".to_string(), format!("Error while writing to TLS stream!\n{}", e).to_string())
     }
@@ -414,4 +439,24 @@ mod tests {
         assert_eq!(out5, extract_response_header(in5));
     }
 
+    #[test]
+    /// Test that the slug encoder works as expected
+    /// Test for basic functionality and utf8 encoding
+    fn test_encode_url_suffix() {
+        assert_eq!(encode_url_suffix("foo/bar/baz".to_string()), "foo/bar/baz");
+        assert_eq!(encode_url_suffix("a/b/c".to_string()), "a/b/c");
+        assert_eq!(encode_url_suffix("data/document/ドキュメント.pdf".to_string()), "data/document/%E3%83%89%E3%82%AD%E3%83%A5%E3%83%A1%E3%83%B3%E3%83%88.pdf");
+        assert_eq!(encode_url_suffix("justthefile.txt".to_string()), "justthefile.txt"); // No slashes, entire string is 'baz'
+        assert_eq!(encode_url_suffix("category/subcategory/item/specific file.gem".to_string()), "category/subcategory/item/specific+file.gem");
+}    
+
+    #[test]
+    fn test_encode_url_suffix_edge_cases() {
+        // Empty input string
+        assert_eq!(encode_url_suffix("".to_string()), "");
+        // Path with spaces
+        assert_eq!(encode_url_suffix("/root/path/file with spaces".to_string()), "/root/path/file+with+spaces");
+        // Path with spaced subdirectory
+        assert_eq!(encode_url_suffix("dir/subdir/ ".to_string()), "dir/subdir/+");
+    }
 }
