@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 use std::fs;
 
+use native_tls::Certificate;
+use x509_parser::prelude::{FromDer, X509Certificate};
+
 /// Checks a certificate given in a TLS stream with the certificate store.
 /// If the certificate exists and is not expired, then accept it
 /// If the certificate exists and is expired but the PK is different, abort
@@ -9,7 +12,7 @@ use std::fs;
 /// If the certificate exists and is not expired, then accept it
 /// If the certificate exists and is expired but the PK is different, abort
 /// If the certificate !exist, then add it to the certificate store
-fn tofu_handle_certificate(cert: Certificate) -> Result<(), ()> {
+pub fn tofu_handle_certificate(cert: Certificate) -> Result<(), ()> {
     let cert_dir = _tofu_get_cert_dir();
     let cert_der = cert.to_der().unwrap();
     let res = X509Certificate::from_der(&cert_der);
