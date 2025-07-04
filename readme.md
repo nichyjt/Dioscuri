@@ -30,7 +30,7 @@ As such, each module should be doing semantically distinct things and not contam
 ## Installation
 Unfortunately, you will have to build the binary for now.  
 
-First, tnstall cargo/rust on your machine.  
+First, install cargo/rust on your machine.  
 Then, fork this repo and run: `$ cargo run`.  
 Open the client via any browser on `localhost:1965`.  
 Enjoy Gemini!  
