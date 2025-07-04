@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 /// The browser module provides a frontend accessible by http
 /// The following functionality are exposed to other modules
@@ -62,7 +62,18 @@ async fn get_home() -> Html<String>{
 
     match fs::read_to_string(&file_path) {
         Ok(contents) => Html(contents),
-        Err(_) => Html("<h1>Welcome to Gemini!</h1><p>This is the default homepage.</p>".to_string()),
+        Err(_) => Html("
+        <h1>Welcome to Project Dioscuri!</h1>
+            <h2>A hackable, accessible Gemini client.</h2>
+            <p>This is the default homepage.</p>
+            <p>Try browsing with some of these links:</p>
+            <ul>
+                <li><a href=\"/geminiprotocol.net/\">geminiprotocol.net (Gemini Protocol)</a></li>
+                <li><a href=\"/kennedy.gemi.dev\">kennedy.gemi.dev (Kennedy Search Engine)</a></li>
+                <li><a href=\"/bbs.geminispace.org\">bbs.geminispace.org (Gemini BBS)</a></li>
+            </ul>
+        "
+        .to_string()),
     }
 }
 
@@ -109,6 +120,7 @@ async fn get_normal(
         },
         _ => {
             // error
+            println!("{},{}", header, status.as_str());
             return Html("oops!".to_string())
         }
     } 
