@@ -1,7 +1,7 @@
 use std::{io::{Read, Write}, net::TcpStream};
 
-use native_tls::TlsConnector;
-use url::form_urlencoded;
+use native_tls::{TlsConnector, TlsStream};
+use url::{form_urlencoded, Url};
 
 use crate::tofu;
 
@@ -35,6 +35,34 @@ pub enum StatusCode {
     ResponseError,
 }
 
+impl StatusCode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            StatusCode::InputExpected => "Input Expected",
+            StatusCode::InputSensitive => "Input Sensitive",
+            StatusCode::Success => "Success",
+            StatusCode::RedirectTemp => "Temporary Redirect",
+            StatusCode::RedirectPerm => "Permanent Redirect",
+            StatusCode::FailureServerTemp => "Temporary Server Failure",
+            StatusCode::FailureServerUnavailable => "Server Unavailable",
+            StatusCode::FailureServerCgiError => "CGI Error",
+            StatusCode::FailureServerProxyError => "Proxy Error",
+            StatusCode::FailureServerSlowdown => "Server Slowdown",
+            StatusCode::FailureServer => "Permanent Server Failure",
+            StatusCode::FailureServerNotfound => "Not Found",
+            StatusCode::FailureServerGone => "Gone",
+            StatusCode::FailureServerProxyrefused => "Proxy Refused",
+            StatusCode::FailureServerBadReq => "Bad Request",
+            StatusCode::FailureCertNeeded => "Client Certificate Needed",
+            StatusCode::FailureCertUnauthorized => "Client Certificate Unauthorized",
+            StatusCode::FailureCertInvalid => "Client Certificate Invalid",
+            StatusCode::StatusUnknown => "Unknown Status",
+            StatusCode::FailureClient => "Client Failure",
+            StatusCode::ResponseError => "Response Error",
+        }
+    }
+}
+
 impl From<i32> for StatusCode {
     fn from(code: i32) -> Self {
         match code {
@@ -64,7 +92,6 @@ impl From<i32> for StatusCode {
             _ => StatusCode::StatusUnknown
         }
     }
-
 }
 
 
@@ -105,6 +132,7 @@ fn _extract_address_from_url(url: &String) -> String {
 /// {foo}/{bar}/{baz}
 /// urlencode baz and return 
 /// {foo}/{bar}/{baz'}, where baz' is the urlencoded slug
+/// if baz contains a query (i.e. ?), preserve the first ? and urlencode the rest of the input
 fn encode_url_suffix(path_str: String) -> String {
     let (prefix_slice, baz_slice) = if let Some(last_slash_idx) = path_str.rfind('/') {
         // If a slash is found, split into the part before it and the part after it.
@@ -114,8 +142,15 @@ fn encode_url_suffix(path_str: String) -> String {
         // If no slash, the entire string is considered the 'baz' part, with an empty prefix.
         ("", &path_str[..])
     };
-    let encoded_baz: String = form_urlencoded::byte_serialize(baz_slice.as_bytes()).collect();
-    // Reconstruct the URL: "{foo}/{bar}/{baz'}"
+
+    // If baz_slice contains '?', split and encode only the RHS
+    let encoded_baz = if let Some((before_q, after_q)) = baz_slice.split_once('?') {
+        let encoded_right: String = form_urlencoded::byte_serialize(after_q.as_bytes()).collect();
+        format!("{}?{}", before_q, encoded_right)
+    } else {
+        form_urlencoded::byte_serialize(baz_slice.as_bytes()).collect()
+    };
+
     if prefix_slice.is_empty() {
         encoded_baz
     } else {
@@ -173,8 +208,9 @@ fn client_build_request_str(uri: String) -> String {
 pub fn get_gemini(url: String) -> (StatusCode, String, String){
     // Extract out the domain/address, port and uri
     let port = 1965;
-    let addr = format!("{}:{}", _extract_address_from_url(&url), port);
-    let conn_res =  TcpStream::connect(&addr);
+    let addr = _extract_address_from_url(&url);
+    let addr_port = format!("{}:{}", _extract_address_from_url(&url), port);
+    let conn_res =  TcpStream::connect(&addr_port);
     if conn_res.is_err() {
         return (StatusCode::FailureClient, "".to_string(), "TcpStream failed to connect".to_string())
     }
@@ -192,9 +228,15 @@ pub fn get_gemini(url: String) -> (StatusCode, String, String){
     // then urlencode the last section,
     // then re-insert the 'gemini://' prefix
     let url_stripped = _strip_protocol_from_url(&url);
-    let encoded_url = encode_url_suffix(url_stripped);
-    let final_url = format!("gemini://{}", encoded_url);
-    let request = client_build_request_str(final_url);
+
+    // WARNING: Suffix encoding is omitted since many actual gemini servers are lazy and don't decode urlencoded payloads.
+    // TODO: implement a fallback
+    // let encoded_url = encode_url_suffix(url_stripped);
+    // let final_url = format!("gemini://{}", encoded_url);
+    let final_url = format!("gemini://{}", url_stripped);
+
+    let request = client_build_request_str(final_url.clone());
+    println!("req:{}",request.clone());
     if let Err(e) = stream.write_all(request.as_bytes()) {
         return (StatusCode::FailureClient, "".to_string(), format!("Error while writing to TLS stream!\n{}", e).to_string())
     }
@@ -205,8 +247,55 @@ pub fn get_gemini(url: String) -> (StatusCode, String, String){
     }
     // No issue with the response.
     let (code, header, body) = extract_response_header(response);
-
+    if code  == StatusCode::RedirectPerm || code == StatusCode::RedirectTemp {
+        return handle_redirect(final_url, header, stream)
+    }
     return (code, header, body);
+}
+
+/// Automatically handle redirects with depth limit
+fn handle_redirect(initial_url: String, mut redirect_uri: String, mut stream: TlsStream<TcpStream>) -> (StatusCode, String, String) {
+    let mut redirect_depth = 5;
+    let mut current_url = initial_url;
+
+    while redirect_depth > 0 {
+        // Resolve relative redirect_uri against the current_url
+        let resolved = match Url::parse(&current_url)
+            .and_then(|base| base.join(&redirect_uri)) {
+            Ok(u) => u.to_string(),
+            Err(e) => return (
+                StatusCode::FailureClient,
+                "".to_string(),
+                format!("Failed to resolve redirect: {}", e),
+            ),
+        };
+
+        println!("Redirecting to: {}", resolved);
+        if let Err(e) = stream.write_all(resolved.as_bytes()) {
+            return (StatusCode::FailureClient, "".to_string(), format!("Error while writing to TLS stream!\n{}", e).to_string())
+        }
+        let mut response = String::new();
+        if let Err(e) = stream.read_to_string(&mut response) {
+            return (StatusCode::FailureClient, "".to_string(), format!("Error while reading from TLS stream!\n{}", e).to_string())
+        }
+        let (code, header, body) = extract_response_header(response);
+        // If it's another redirect, continue
+        if code == StatusCode::RedirectPerm || code == StatusCode::RedirectTemp {
+            current_url = resolved;
+            redirect_uri = header.clone(); // follow new redirect location
+            redirect_depth -= 1;
+            continue;
+        }
+
+        // Otherwise, return the result
+        return (code, header, body);
+    }
+
+    (
+        StatusCode::FailureClient,
+        "".to_string(),
+        "Too many redirects".to_string(),
+    )
 }
 
 #[cfg(test)]
@@ -448,6 +537,7 @@ mod tests {
         assert_eq!(encode_url_suffix("data/document/ドキュメント.pdf".to_string()), "data/document/%E3%83%89%E3%82%AD%E3%83%A5%E3%83%A1%E3%83%B3%E3%83%88.pdf");
         assert_eq!(encode_url_suffix("justthefile.txt".to_string()), "justthefile.txt"); // No slashes, entire string is 'baz'
         assert_eq!(encode_url_suffix("category/subcategory/item/specific file.gem".to_string()), "category/subcategory/item/specific+file.gem");
+        assert_eq!(encode_url_suffix("test/query/foo?bar=baz".to_string()), "test/query/foo?bar%3Dbaz");
 }    
 
     #[test]

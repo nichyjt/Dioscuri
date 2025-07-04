@@ -25,10 +25,10 @@ pub fn tofu_handle_certificate(cert: Certificate) -> Result<(), ()> {
             let subject_cn = target_cert.subject().iter_common_name().next().unwrap();
             let domain_str = subject_cn.as_str().unwrap();
             let target_cert_path = cert_dir.join(format!("{}.der", domain_str));
-            println!("Certificate for domain: {}", domain_str);
+            // println!("Certificate for domain: {}", domain_str);
             // Search cert store
             if target_cert_path.exists() {
-                println!("Certificate found in certificate store!");
+                // println!("Certificate found in certificate store!");
 
                 let src_cert_der = fs::read(&target_cert_path).unwrap();
                 let (_, src_cert) = X509Certificate::from_der(&src_cert_der).unwrap();
@@ -39,10 +39,10 @@ pub fn tofu_handle_certificate(cert: Certificate) -> Result<(), ()> {
                     let target_pub_key = target_cert.public_key();
 
                     if src_pub_key == target_pub_key {
-                        println!("Certificate is valid and public keys match.");
+                        // println!("Certificate is valid and public keys match.");
                         return Ok(()); // Accept if the certificate is valid and public keys match
                     } else {
-                        println!("Public keys do not match. Aborting trust.");
+                        // println!("Public keys do not match. Aborting trust.");
                         return Err(()); // Abort if the public keys do not match
                     }
                 } else {
@@ -51,16 +51,16 @@ pub fn tofu_handle_certificate(cert: Certificate) -> Result<(), ()> {
                     let target_pub_key = target_cert.public_key();
 
                     if src_pub_key == target_pub_key {
-                        println!("Source certificate expired but public keys match. Updating certificate.");
+                        // println!("Source certificate expired but public keys match. Updating certificate.");
                         fs::write(&target_cert_path, &cert_der).unwrap();
                         return Ok(());
                     } else {
-                        println!("Source certificate expired but public keys do not match. Abort!");
+                        // println!("Source certificate expired but public keys do not match. Abort!");
                         return Err(());
                     }
                 }
             }else{
-                println!("Certificate does not exist in the store. Adding to trust store (TOFU)...");
+                // println!("Certificate does not exist in the store. Adding to trust store (TOFU)...");
                 fs::create_dir_all(&cert_dir).unwrap();
                 fs::write(&target_cert_path, &cert_der).unwrap();
                 println!("New certificate for {} added to trust store.", domain_str);
@@ -68,7 +68,7 @@ pub fn tofu_handle_certificate(cert: Certificate) -> Result<(), ()> {
             }
         },
         Err(_) => {
-            println!("Error: Certificate from server is invalid.");
+            // println!("Error: Certificate from server is invalid.");
             Err(()) // Return error if certificate parsing failed
         }
     }
