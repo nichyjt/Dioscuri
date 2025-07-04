@@ -105,6 +105,7 @@ fn _extract_address_from_url(url: &String) -> String {
 /// {foo}/{bar}/{baz}
 /// urlencode baz and return 
 /// {foo}/{bar}/{baz'}, where baz' is the urlencoded slug
+/// if baz contains a query (i.e. ?), preserve the first ? and urlencode the rest of the input
 fn encode_url_suffix(path_str: String) -> String {
     let (prefix_slice, baz_slice) = if let Some(last_slash_idx) = path_str.rfind('/') {
         // If a slash is found, split into the part before it and the part after it.
@@ -114,8 +115,15 @@ fn encode_url_suffix(path_str: String) -> String {
         // If no slash, the entire string is considered the 'baz' part, with an empty prefix.
         ("", &path_str[..])
     };
-    let encoded_baz: String = form_urlencoded::byte_serialize(baz_slice.as_bytes()).collect();
-    // Reconstruct the URL: "{foo}/{bar}/{baz'}"
+
+    // If baz_slice contains '?', split and encode only the RHS
+    let encoded_baz = if let Some((before_q, after_q)) = baz_slice.split_once('?') {
+        let encoded_right: String = form_urlencoded::byte_serialize(after_q.as_bytes()).collect();
+        format!("{}?{}", before_q, encoded_right)
+    } else {
+        form_urlencoded::byte_serialize(baz_slice.as_bytes()).collect()
+    };
+
     if prefix_slice.is_empty() {
         encoded_baz
     } else {
@@ -448,6 +456,7 @@ mod tests {
         assert_eq!(encode_url_suffix("data/document/ドキュメント.pdf".to_string()), "data/document/%E3%83%89%E3%82%AD%E3%83%A5%E3%83%A1%E3%83%B3%E3%83%88.pdf");
         assert_eq!(encode_url_suffix("justthefile.txt".to_string()), "justthefile.txt"); // No slashes, entire string is 'baz'
         assert_eq!(encode_url_suffix("category/subcategory/item/specific file.gem".to_string()), "category/subcategory/item/specific+file.gem");
+        assert_eq!(encode_url_suffix("test/query/foo?bar=baz".to_string()), "test/query/foo?bar%3Dbaz");
 }    
 
     #[test]
