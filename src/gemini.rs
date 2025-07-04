@@ -208,8 +208,9 @@ fn client_build_request_str(uri: String) -> String {
 pub fn get_gemini(url: String) -> (StatusCode, String, String){
     // Extract out the domain/address, port and uri
     let port = 1965;
-    let addr = format!("{}:{}", _extract_address_from_url(&url), port);
-    let conn_res =  TcpStream::connect(&addr);
+    let addr = _extract_address_from_url(&url);
+    let addr_port = format!("{}:{}", _extract_address_from_url(&url), port);
+    let conn_res =  TcpStream::connect(&addr_port);
     if conn_res.is_err() {
         return (StatusCode::FailureClient, "".to_string(), "TcpStream failed to connect".to_string())
     }
@@ -235,6 +236,7 @@ pub fn get_gemini(url: String) -> (StatusCode, String, String){
     let final_url = format!("gemini://{}", url_stripped);
 
     let request = client_build_request_str(final_url.clone());
+    println!("req:{}",request.clone());
     if let Err(e) = stream.write_all(request.as_bytes()) {
         return (StatusCode::FailureClient, "".to_string(), format!("Error while writing to TLS stream!\n{}", e).to_string())
     }
