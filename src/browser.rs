@@ -8,7 +8,7 @@ use axum::{
     extract::{Path}, http::Uri, response::Html, routing::get, Router
 };
 
-use crate::gemini::{get_gemini, StatusCode};
+use crate::{gemini::{get_gemini, StatusCode}, gemtext::gemtext_to_html};
 
 /// Starts a HTTP server that acts as a proxy between gemini servers and the user interacting via a browser
 /// This is a blocking function.
@@ -93,7 +93,7 @@ async fn get_normal(
     let (status, header, body) = get_gemini(gem_url);
     match status {
         StatusCode::Success => {
-            return Html(body);
+            return Html(gemtext_to_html(body));
         },
         StatusCode::InputExpected => {
             let str = format!(
