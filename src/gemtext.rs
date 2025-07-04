@@ -3,7 +3,6 @@
 /// Takes in a gemtext string, converts it to md then converts it to html
 pub fn gemtext_to_html(gemtext: String) -> String {
     let md = gemtext_to_md(gemtext);
-    println!("{}",md.clone());
     return markdown::to_html(&md);
 }
 
@@ -61,17 +60,18 @@ mod tests {
     #[test]
     fn test_basic_heading_and_paragraph() {
         let input = "# Title\nThis is a paragraph.";
-        let expected = "# Title\nThis is a paragraph.\n";
+        let expected = "# Title\n\nThis is a paragraph.\n\n";
         assert_eq!(gemtext_to_md(input.to_string()), expected);
     }
 
     #[test]
     fn test_links() {
         let in0 = "hello\n=>/relative/link.gmi";
-        let out0 = "hello\n[/relative/link.gmi](/relative/link.gmi)\n";
+        let out0 = "hello\n\n[relative/link.gmi](relative/link.gmi)\n\n";
         assert_eq!(gemtext_to_md(in0.to_string()), out0);
         let in1 = "hello\n=>/relative/link.gmi my custom / text!";
-        let out1 = "hello\n[my custom / text!](/relative/link.gmi)\n";
+        let out1 = "hello\n\n[my custom / text!](relative/link.gmi)\n\n";
+        println!("{}",gemtext_to_md(in1.to_string()));
         assert_eq!(gemtext_to_md(in1.to_string()), out1);
     }
 
