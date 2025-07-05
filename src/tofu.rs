@@ -63,7 +63,7 @@ pub fn tofu_handle_certificate(cert: Certificate) -> Result<(), ()> {
                 // println!("Certificate does not exist in the store. Adding to trust store (TOFU)...");
                 fs::create_dir_all(&cert_dir).unwrap();
                 fs::write(&target_cert_path, &cert_der).unwrap();
-                println!("New certificate for {} added to trust store.", domain_str);
+                // println!("New certificate for {} added to trust store.", domain_str);
                 return Ok(()); // Add and accept the new certificate
             }
         },
