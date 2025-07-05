@@ -14,13 +14,10 @@ pub fn gemtext_to_html(gemtext: String, url: String) -> String {
 /// Fortunately, gemtext is close enough to markdown to allow minimal changes.
 /// All lines will be appended with a trailing \n
 fn gemtext_to_md(gemtext: String, _baseurl: String) -> String {
-    println!("{}", _baseurl);
-
     let mut result = String::new();
 
     for line in gemtext.lines() {
         let trimmed = line.trim_start();
-        println!("{}",trimmed);
         // Convert links to md links
         if trimmed.starts_with("=>") {
             result.push_str(&format!("{}\n\n",resolve_links(trimmed.to_string(), _baseurl.clone())));
