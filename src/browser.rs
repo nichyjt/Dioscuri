@@ -10,7 +10,7 @@ static HTML_HOME_FILENAME: &str = "home.html";
 static HTML_DEFAULT_HOMEPAGE: &str = "
 <h1>Welcome to Project Dioscuri!</h1>
 <h2>A hackable, accessible Gemini client.</h2>
-<p>This is the default homepage. You can drop</p>
+<p>This is the default homepage.</p>
 <p>Try browsing with some of these links:</p>
 <ul>
     <li><a href=\"/geminiprotocol.net/\">geminiprotocol.net (Gemini Protocol)</a></li>
