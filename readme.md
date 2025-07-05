@@ -60,8 +60,8 @@ Dioscuri will inject content in these components:
 - `<DioscuriInput/>` for input field
 
 **Two possibilities**:  
-1. If the website you are on needs user input, Dioscuri will inject into `<DioscuriPrompt/>` and `<DioscuriInput/>`, and ignore `<Dioscuri>`
-2. If the website you are on just serves content, Dioscuri will inject into `<Dioscuri>`, and ignore the other tags.
+1. If the website you are on needs user input, Dioscuri will inject into `<DioscuriPrompt/>` and `<DioscuriInput/>`, and ignore `<Dioscuri/>`
+2. If the website you are on just serves content, Dioscuri will inject into `<Dioscuri/>`, and ignore the other tags.
 
 For example, consider this `body.html`:  
 ``` html
@@ -107,7 +107,7 @@ If the webpage requires your input (maybe you are using a search engine), then:
 For now, `<DioscuriInput/>` is not customizable. It will always be injected with `<form method="get"><label><input type="text" name="query"></label><input type="submit" value="Submit"></form>`  
 
 #### Missing Components
-If components are missing, 
+If any Dioscuri components are missing, they will be automatically appended to the back of `body.html`.  
 
 ### Custom form content
 
