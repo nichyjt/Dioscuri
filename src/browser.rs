@@ -2,10 +2,34 @@ use std::{fs, path::PathBuf};
 
 /// The browser module provides a frontend accessible by http
 /// The following functionality are exposed to other modules
-/// start_browser
+
+// Constants
+static HTML_HEAD_FILENAME: &str = "head.html";
+static HTML_BODY_FILENAME: &str = "body.html";
+static HTML_HOME_FILENAME: &str = "home.html";
+static HTML_DEFAULT_HOMEPAGE: &str = "
+<h1>Welcome to Project Dioscuri!</h1>
+<h2>A hackable, accessible Gemini client.</h2>
+<p>This is the default homepage. You can drop</p>
+<p>Try browsing with some of these links:</p>
+<ul>
+    <li><a href=\"/geminiprotocol.net/\">geminiprotocol.net (Gemini Protocol)</a></li>
+    <li><a href=\"/kennedy.gemi.dev\">kennedy.gemi.dev (Kennedy Search Engine)</a></li>
+    <li><a href=\"/bbs.geminispace.org\">bbs.geminispace.org (Gemini BBS)</a></li>
+</ul>
+";
+
+static HTML_DEFAULT_INPUT: &str = "
+<form method=\"get\"><label><input type=\"text\" name=\"query\"></label><input type=\"submit\" value=\"Submit\"></form>
+";
+
+static COMPONENT_MAIN: &str = "<Dioscuri/>";
+static COMPONENT_PROMPT: &str = "<DioscuriPrompt/>";
+static COMPONENT_INPUT: &str = "<DioscuriInput/>";
+
 
 use axum::{
-    extract::{Path}, http::Uri, response::Html, routing::get, Router
+    body::Body, extract::Path, http::{self, Uri}, response::{Html, IntoResponse, Response}, routing::get, Router
 };
 
 use crate::{gemini::{get_gemini, StatusCode}, gemtext::gemtext_to_html};
@@ -13,7 +37,7 @@ use crate::{gemini::{get_gemini, StatusCode}, gemtext::gemtext_to_html};
 /// Starts a HTTP server that acts as a proxy between gemini servers and the user interacting via a browser
 /// This is a blocking function.
 pub fn start_browser()  {
-    let _ = _browser_setup_directory();
+    _browser_setup_directory();
     match tokio::runtime::Runtime::new() {
         Ok(runtime) => {
             runtime.block_on(start_axum());
@@ -28,53 +52,83 @@ async fn start_axum(){
     let app = Router::new()
         .route("/", get(get_home))
         .route("/{*url}", get(get_normal))
+        .route("/.src/{*path}", get(get_resource))
         ;
-        // .route("/gemini/error/{code}", get(get_error))
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:1965").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
-fn _browser_setup_directory() -> Result<PathBuf, std::io::Error> {
+/// Sets up the browser resource directory
+fn _browser_setup_directory() {
     let home_dir = dirs::home_dir().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory does not exist?")
-    })?;
+    }).unwrap();
     let dioscuri_dir = home_dir.join(".dioscuri/browser");
     if !dioscuri_dir.exists() {
-        fs::create_dir_all(&dioscuri_dir)?;
+        fs::create_dir_all(&dioscuri_dir).unwrap();
         println!("Creating directory: {:?}", dioscuri_dir);
     }
-    Ok(dioscuri_dir)
+}
+
+/// Returns ~/.dioscuri/browser
+/// Assumes that the folder has been setup properly
+fn get_resource_dir() -> PathBuf {
+    let home_dir = dirs::home_dir().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory does not exist?")
+    }).unwrap();
+    let dioscuri_dir = home_dir.join(".dioscuri/browser");
+    if !dioscuri_dir.exists() {
+        let _ = fs::create_dir_all(&dioscuri_dir);
+        println!("Creating directory: {:?}", dioscuri_dir);
+    }
+    dioscuri_dir
+}
+
+/// Searches the resource directory for body.html 
+/// if does not exist, return ""
+fn load_body() -> String {
+    let path = get_resource_dir().join(HTML_BODY_FILENAME);
+    fs::read_to_string(path).unwrap_or_else(|_| "".to_string())
+}
+
+/// Searches the resource directory for head.html
+/// if does not exist, return ""
+fn load_header() -> String {
+    let path = get_resource_dir().join(HTML_HEAD_FILENAME);
+    fs::read_to_string(path).unwrap_or_else(|_| "".to_string())
+}
+
+/// Searches the resource directory for home.html
+/// if does not exist, return HTML_DEFAULT_HOMEPAGE
+fn load_home() -> String {
+    let path = get_resource_dir().join(HTML_HOME_FILENAME);
+    fs::read_to_string(path).unwrap_or_else(|_| HTML_DEFAULT_HOMEPAGE.to_string())
+}
+
+/// Loads head.html concat body.html.
+/// Once they are concatenated, ensure that the skeleton html contains the injectable tags.
+/// If any <Dioscuri/> or <DioscuriPrompt/> or <DioscuriInput/> are missing,
+/// append them to the back of the skeleton.
+/// this ensures that the skeleton html content can properly render all content regardless
+/// of the existence of head.html and body.html
+fn load_skeleton() -> String {
+    let mut skeleton = format!("{}{}",load_header(), load_body());
+    if !skeleton.contains(COMPONENT_MAIN){
+        skeleton.push_str(COMPONENT_MAIN);
+    }
+    if !skeleton.contains(COMPONENT_PROMPT){
+        skeleton.push_str(COMPONENT_PROMPT);
+    }
+    if !skeleton.contains(COMPONENT_INPUT){
+        skeleton.push_str(COMPONENT_INPUT);
+    }
+    skeleton
 }
 
 /// returns .dioscuri/browser/home.html, else a default if not found
 async fn get_home() -> Html<String>{
-    // Try to get the user's home directory
-    let home_dir = match dirs::home_dir() {
-        Some(path) => path,
-        None => {
-            return Html("<h1>Error!</h1><p>Could not determine home directory.</p>".to_string());
-        }
-    };
-
-    // full path to ~/.dioscuri/browser/home.html
-    let file_path: PathBuf = home_dir.join(".dioscuri/browser/home.html");
-
-    match fs::read_to_string(&file_path) {
-        Ok(contents) => Html(contents),
-        Err(_) => Html("
-        <h1>Welcome to Project Dioscuri!</h1>
-            <h2>A hackable, accessible Gemini client.</h2>
-            <p>This is the default homepage.</p>
-            <p>Try browsing with some of these links:</p>
-            <ul>
-                <li><a href=\"/geminiprotocol.net/\">geminiprotocol.net (Gemini Protocol)</a></li>
-                <li><a href=\"/kennedy.gemi.dev\">kennedy.gemi.dev (Kennedy Search Engine)</a></li>
-                <li><a href=\"/bbs.geminispace.org\">bbs.geminispace.org (Gemini BBS)</a></li>
-            </ul>
-        "
-        .to_string()),
-    }
+    return Html(format!("{}{}",load_header(),load_home()));
 }
 
 /// Given a query {foo}={bar}, where bar can include more queries,
@@ -104,26 +158,73 @@ async fn get_normal(
     let (status, header, body) = get_gemini(gem_url);
     match status {
         StatusCode::Success => {
-            return Html(gemtext_to_html(body));
+            let html = gemtext_to_html(body, url);
+            let skeleton = load_skeleton();
+            // inject the components
+            let res = skeleton.replace(COMPONENT_MAIN, &html)
+                                    .replace(COMPONENT_INPUT, "")
+                                    .replace(COMPONENT_PROMPT, "");
+            return Html(res)
         },
         StatusCode::InputExpected => {
-            let str = format!(
-                "{header}<br><form method=\"get\"><label><input type=\"text\" name=\"query\"></label><input type=\"submit\" value=\"Submit\"></form>"
-            );
-            return Html(str);
+            let skeleton = load_skeleton();
+            // inject the components
+            let res = skeleton.replace(COMPONENT_MAIN, "")
+                                    .replace(COMPONENT_INPUT, HTML_DEFAULT_INPUT)
+                                    .replace(COMPONENT_PROMPT, &header);
+            return Html(res);
         },
         StatusCode::InputSensitive => {
-            let str = format!(
-                "{header}<br><form method=\"get\"><label><input type=\"text\" name=\"query\"></label><input type=\"submit\" value=\"Submit\"></form>"
-            );
-            return Html(str);
+            let skeleton = load_skeleton();
+            // inject the components
+            let res = skeleton.replace(COMPONENT_MAIN, "")
+                                    .replace(COMPONENT_INPUT, HTML_DEFAULT_INPUT)
+                                    .replace(COMPONENT_PROMPT, &header);
+            return Html(res);
         },
         _ => {
-            // error
-            println!("{},{}", header, status.as_str());
-            return Html("oops!".to_string())
+            let skeleton = load_skeleton();
+            // inject the components
+            let res = skeleton.replace(COMPONENT_MAIN, &header)
+                                    .replace(COMPONENT_INPUT, "")
+                                    .replace(COMPONENT_PROMPT, "");
+            return Html(res);
         }
     } 
+}
+
+/// Searches ~/.dioscuri/browser/{my_path_to_file} by extracting my_path_to_file
+/// The filepath must only exist within the browser/ folder for security concerns
+async fn get_resource(Path(filepath): Path<String>) -> impl IntoResponse {
+    println!("Requested resouce: {}", filepath);
+    // get the resource directory first
+    let parent_dir = get_resource_dir();
+    let resource_path = parent_dir.join(filepath);
+
+    // resolve symlinks and relative components
+    let Ok(resource_path_canon) = resource_path.canonicalize() else {
+        return (http::StatusCode::NOT_FOUND, "Invalid file path").into_response();
+    };
+
+    let Ok(parent_canon) = parent_dir.canonicalize() else {
+        return (http::StatusCode::INTERNAL_SERVER_ERROR, "Dioscuri's browser resource folder is invalid!").into_response();
+    };
+
+    // resource should be a child of the browser folder
+    if !resource_path_canon.starts_with(&parent_canon) {
+        return (http::StatusCode::FORBIDDEN, "Access denied").into_response();
+    }
+
+    // read and serve the resource
+    match fs::read(&resource_path_canon) {
+        Ok(contents) => {
+            Response::builder()
+                .status(http::StatusCode::OK)
+                .body(Body::from(contents))
+                .unwrap()
+        }
+        Err(_) => (http::StatusCode::NOT_FOUND, "File not found").into_response(),
+    }
 }
 
 #[cfg(test)]
