@@ -11,7 +11,7 @@ Dioscuri is currently in **Beta**.
 Dioscuri aims to be a hackable, accessible way to access hobbyist network protocols such as Gemini.
 
 **Hackable**
-- Eventually, Dioscuri aims to allow you to roll your own html,css,js and themes to customize your experience.
+- Dioscuri aims to allow you to roll your own html,css,js and themes to customize your experience.
   Similar vibes to old school Netscape or building your own Blogger website!
 
 **Accessible**
