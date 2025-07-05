@@ -73,6 +73,9 @@ mod tests {
         let out1 = "hello\n\n[my custom / text!](relative/link.gmi)\n\n";
         println!("{}",gemtext_to_md(in1.to_string()));
         assert_eq!(gemtext_to_md(in1.to_string()), out1);
+        let in2 = "hello\n=>gemini://new_address.net/foo.gmi go to new address!";
+        let out2 = "hello\n\n[go to new address!](/new_address.net/foo.gmi)\n\n";
+        assert_eq!(gemtext_to_md(in2.to_string()), out2);
     }
 
 }
