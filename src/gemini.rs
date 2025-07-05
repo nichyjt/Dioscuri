@@ -236,7 +236,7 @@ pub fn get_gemini(url: String) -> (StatusCode, String, String){
     let final_url = format!("gemini://{}", url_stripped);
 
     let request = client_build_request_str(final_url.clone());
-    println!("req:{}",request.clone());
+    
     if let Err(e) = stream.write_all(request.as_bytes()) {
         return (StatusCode::FailureClient, "".to_string(), format!("Error while writing to TLS stream!\n{}", e).to_string())
     }
