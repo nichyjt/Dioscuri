@@ -4,8 +4,8 @@ Yet another [Gemini](http://portal.mozz.us/gemini/geminiprotocol.net/) protocol 
 
 Dioscuri is currently in **Beta**.
 - this client supports basic surfing and browsing :white_check_mark:
+- this client supports browser customizability! [See: User Hacking Guide](#user-hacking-guide)
 - this client DOES NOT support user-state management yet (i.e. you provide your own cert) :x:
-- this client DOES NOT support any customizability yet :x:
 
 ## Vision
 Dioscuri aims to be a hackable, accessible way to access hobbyist network protocols such as Gemini.
@@ -18,7 +18,114 @@ Dioscuri aims to be a hackable, accessible way to access hobbyist network protoc
 - No need to install fancy GUI dependencies such as wxWidgets or curses or whatever which you won't use in a month's time
 - Simply access Gemini from the convenience of a good-ol regular web browser!
 
-## Architecture 
+# User Hacking Guide
+
+Dioscuri works out the box, but you can customize it!  
+
+## Customizing the interface
+
+Dioscuri will always load the following files from `~/.dioscuri/browser/` in this order:  
+1. `head.html`
+2. `body.html` if not homepage, else `home.html`
+
+If `head.html` does not exist, then it will be skipped.  
+If `body.html` does not exist, then Dioscuri will just serve the HTML rendered content directly.
+If `home.html` does not exist, then Dioscuri will serve a default homepage.
+
+### hacking `head.html` and using custom resources
+
+Typically, in `head.html`, you would import stylesheets and various `js` to suit your browsing needs.  
+HTML resources that use http(s) links will work out of the box. For example:  
+``` html
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+```
+
+But if you want to serve content **locally**, you must do the following:  
+1. Place your file content in `~/.dioscuri/browser/{your_file_path}`  
+2. reference it via `href="/.src/{your_file_path}`
+
+Strict path matching is used.
+- `href=".src/my_file.css"` will fail
+- `href="/.src/my_file.css"` will work
+
+For example, for `~/.dioscuri/browser/stylesheets/style.css`, use `href="/.src/stylesheets/style.css"` in your link tag.  
+
+### Diosuri components
+Dioscuri will automatically convert gemini protocol content into HTML.  
+It will then search `body.html` for component HTML tags to inject HTML content there!  
+
+Dioscuri will inject content in these components:
+- `<Dioscuri/>` for normal content and error messages
+- `<DioscuriPrompt/>` for input prompt
+- `<DioscuriInput/>` for input field
+
+**Two possibilities**:  
+1. If the website you are on needs user input, Dioscuri will inject into `<DioscuriPrompt/>` and `<DioscuriInput/>`, and ignore `<Dioscuri>`
+2. If the website you are on just serves content, Dioscuri will inject into `<Dioscuri>`, and ignore the other tags.
+
+For example, consider this `body.html`:  
+``` html
+<body>
+<h1>Hello, world!</h1>
+<Dioscuri/>
+<p>======</p> 
+<h3><DioscuriPrompt></h3>
+<p>++++++</p>
+<DioscuriInput>
+<h1 class="my_custom_class">Goodbye, world!</h1>
+</body>
+```  
+
+If the website you talk to just returns a webpage:  
+
+```html
+<body>
+<h1>Hello, world!</h1>
+<h1>Injected Content</h1>
+<h2>The injected content contains...</h2>
+<p>Whatever the Gemini website serves,</p>
+<a>Including links!</a>
+<p>======</p> 
+<p>++++++</p>
+<h1 class="my_custom_class">Goodbye, world!</h1>
+</body>
+```
+
+If the webpage requires your input (maybe you are using a search engine), then:  
+
+``` html  
+<body>
+<h1>Hello, world!</h1>
+<p>======</p> 
+<h3>Enter your query!</h3>
+<p>++++++</p>
+<form method="get"><label><input type="text" name="query"></label><input type="submit" value="Submit"></form>
+<h1 class="my_custom_class">Goodbye, world!</h1>
+</body>
+```  
+
+For now, `<DioscuriInput/>` is not customizable. It will always be injected with `<form method="get"><label><input type="text" name="query"></label><input type="submit" value="Submit"></form>`  
+
+#### Missing Components
+If components are missing, 
+
+### Custom form content
+
+If you really want to, you can add your own form content to interact directly with Dioscuri (specifically, the HTTP proxy).  
+Note that the gemini protocol treats queries as user input.  
+
+So, if you wanted to send user input for a page `foo.net/hello`, your form should send a GET request to the proxy as such:  
+`GET http://localhost:port/foo.net/hello?q=Your User Input!`.  
+Gemini protocol does not care about the key, just the value.  
+Behind the scenes, the URL will be reformatted to `foo.net/hello?Your User Input!`. Notice that the form key "q" was thrown away.  
+
+If you wanted to go directly to a particular website, your form should send a GET request to the proxy as such:  
+`GET http://localhost:port/goto_this_site.com`.  
+Dioscuri will go to `goto_this_site.com`. You can also just use your browser address bar and type in `http://localhost:port/goto_this_site.com` and it will work the same!  
+
+# Developer Guide
+
+## Architecture  
 
 Each box denotes a submodule in the project.
 
