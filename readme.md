@@ -53,6 +53,11 @@ Q: I can't find `.dioscuri/browser/` to install themes!
 > If you are on Linux, `$ cd ~/.dioscuri/browser`  
 > If you are on Windows, the folder is located on `C://Users/your_username/.dioscuri/browser/`
 
+Q: The linux binary is borked!
+> You may be missing dependencies!  
+> Try: `$ sudo apt install libssl3`  
+> If this does not work, contact me.
+
 Q: Why does it look so ugly compared to the demo?
 > Did you install a theme yet? Copy paste the theme files into the `.dioscuri/browser` directory! 
 
