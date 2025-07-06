@@ -17,7 +17,7 @@ Below are some themes that work out of the box. Find them in `themes/`.
 ![nyancat demo](docs/nyan.gif)  
 
 **Need something minimal to work out of the box? Sure! Newspaper demo**  
-![newspaper demo](docs/newspaoper)
+![newspaper demo](docs/newspaper.gif)
 
 Dioscuri is currently in **Beta**.
 - this client supports basic surfing and browsing :white_check_mark:
