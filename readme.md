@@ -5,8 +5,11 @@ Yet another [Gemini](http://portal.mozz.us/gemini/geminiprotocol.net/) protocol 
 Dioscuri brings Gemini (the protocol) to your web browser with customizability and accessibility at the forefront.  
 
 Dioscuri works out of the box, but allows you to customize your browsing experience for Gemini websites.  
-Roll your own js, html, css!  
+Roll your own js, html, css! [Quickstart](#quickstart).
 
+[Dioscuri](https://en.wikipedia.org/wiki/Castor_and_Pollux) is the Greek name for Pollux and Castor, mythological twins that embody the **Gemini** constellation.  
+
+## Showcase
 Below are some themes that work out of the box. Find them in `themes/`.  
 
 **Modern theme demo:**  
@@ -14,9 +17,11 @@ Below are some themes that work out of the box. Find them in `themes/`.
 ![modern demo](docs/modern.gif)
 
 **Want to emulate the 2010s? No problem! Nyan demo**:  
+
 ![nyancat demo](docs/nyan.gif)  
 
 **Need something minimal to work out of the box? Sure! Newspaper demo**  
+
 ![newspaper demo](docs/newspaper.gif)
 
 Dioscuri is currently in **Beta**.
@@ -35,6 +40,21 @@ Dioscuri aims to be a hackable, accessible way to access hobbyist network protoc
 **Accessible**
 - No need to install fancy GUI dependencies such as wxWidgets or curses or whatever which you won't use in a month's time
 - Simply access Gemini from the convenience of a good-ol regular web browser!
+
+### Quickstart
+
+1. Download `dioscuri.exe` or `dioscuri` from the release page, based on your operating system.  
+2. Launch the client! You might need to allow network access if you are using Windows.  
+3. Out of the box, it probably looks ugly. Install a theme by copy pasting the files in `theme/a_theme` into the `.dioscuri/browser` directory.
+
+### FAQ  
+
+Q: I can't find `.dioscuri/browser/` to install themes! 
+> If you are on Linux, `$ cd ~/.dioscuri/browser`  
+> If you are on Windows, the folder is located on `C://Users/your_username/.dioscuri/browser/`
+
+Q: Why does it look so ugly compared to the demo?
+> Did you install a theme yet? Copy paste the theme files into the `.dioscuri/browser` directory! 
 
 # User Hacking Guide
 
