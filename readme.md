@@ -10,14 +10,19 @@ Roll your own js, html, css!
 Below are some themes that work out of the box. Find them in `themes/`.  
 
 **Modern theme demo:**  
-
-![modern demo](docs/modern.mp4)
+<video src="docs/modern.mp4" placeholder="docs/modern.mp4" autoplay loop controls muted title="modern theme demo">
+Sorry, your browser doesn't support HTML 5 video.
+</video>
 
 **Want to emulate the 2010s? No problem! Nyan demo**:  
-![nyancat demo](docs/nyan.mp4)  
+<video src="docs/nyan.mp4" placeholder="docs/nyan.mp4" autoplay loop controls muted title="nyan theme demo">
+Sorry, your browser doesn't support HTML 5 video.
+</video>
 
 **Need something minimal to work out of the box? Sure! Newspaper demo**  
-![newspaper demo](docs/newspaoper)
+<video src="docs/newspaper.mp4" placeholder="docs/newspaper.mp4" autoplay loop controls muted title="newspaper theme demo">
+Sorry, your browser doesn't support HTML 5 video.
+</video>
 
 Dioscuri is currently in **Beta**.
 - this client supports basic surfing and browsing :white_check_mark:
