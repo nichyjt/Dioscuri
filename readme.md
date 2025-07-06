@@ -2,10 +2,28 @@
 
 Yet another [Gemini](http://portal.mozz.us/gemini/geminiprotocol.net/) protocol implementation in Rust.  
 
+Dioscuri brings Gemini (the protocol) to your web browser with customizability and accessibility at the forefront.  
+
+Dioscuri works out of the box, but allows you to customize your browsing experience for Gemini websites.  
+Roll your own js, html, css!  
+
+Below are some themes that work out of the box. Find them in `themes/`.  
+
+**Modern theme demo:**  
+
+![modern demo](docs/modern.mp4)
+
+**Want to emulate the 2010s? No problem! Nyan demo**:  
+![nyancat demo](docs/nyan.mp4)  
+
+**Need something minimal to work out of the box? Sure! Newspaper demo**  
+![newspaper demo](docs/newspaoper)
+
 Dioscuri is currently in **Beta**.
 - this client supports basic surfing and browsing :white_check_mark:
 - this client supports browser customizability! [See: User Hacking Guide](#user-hacking-guide)
 - this client DOES NOT support user-state management yet (i.e. you provide your own cert) :x:
+- this client DOES NOT properly handle gemini images yet :x:
 
 ## Vision
 Dioscuri aims to be a hackable, accessible way to access hobbyist network protocols such as Gemini.
@@ -20,7 +38,9 @@ Dioscuri aims to be a hackable, accessible way to access hobbyist network protoc
 
 # User Hacking Guide
 
-Dioscuri works out the box, but you can customize it!  
+Dioscuri works out the box, but you can customize it.
+
+See examples in the `themes` directory.
 
 ## Customizing the interface
 
