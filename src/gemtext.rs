@@ -1,3 +1,4 @@
+use comrak::ComrakOptions;
 use url::Url;
 
 /// Given a gemtext string, perform some manipulations and return the desired result
@@ -6,7 +7,15 @@ use url::Url;
 /// baseurl is used to relativize all links the baseurl provided. leave as empty string if not needed
 pub fn gemtext_to_html(gemtext: String, url: String) -> String {
     let md = gemtext_to_md(gemtext, url);
-    return markdown::to_html(&md);
+    let options = ComrakOptions {
+        render: comrak::ComrakRenderOptions {
+            hardbreaks: true,
+            unsafe_: true, // allow raw HTML
+            ..Default::default()
+         },
+        ..Default::default()
+    };
+    comrak::markdown_to_html(&md, &options)
 }
 
 /// Converts gemtext to md.
@@ -15,14 +24,12 @@ pub fn gemtext_to_html(gemtext: String, url: String) -> String {
 /// All lines will be appended with a trailing \n
 fn gemtext_to_md(gemtext: String, _baseurl: String) -> String {
     let mut result = String::new();
-
     for line in gemtext.lines() {
-        let trimmed = line.trim_start();
-        // Convert links to md links
+        let trimmed = line.trim();
         if trimmed.starts_with("=>") {
-            result.push_str(&format!("{}\n\n",resolve_links(trimmed.to_string(), _baseurl.clone())));
+            result.push_str(&format!("{}\n", resolve_links(trimmed.to_string(), _baseurl.clone())));
         } else {
-            result.push_str(&format!("{}\n\n", trimmed)); // plain paragraph
+            result.push_str(&format!("{}\n", trimmed));
         }
     }
     result

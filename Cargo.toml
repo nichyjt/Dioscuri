@@ -7,9 +7,9 @@ edition = "2021"
 
 [dependencies]
 axum = "0.8.4"
+comrak = "0.39.1"
 dirs = "6.0.0"
 hyper = "1.6.0"
-markdown = "1.0.0"
 native-tls = "0.2.14"
 tokio = {version = "1.46.0", features = ["full"]}
 tower = "0.5.2"

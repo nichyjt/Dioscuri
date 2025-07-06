@@ -196,7 +196,6 @@ async fn get_normal(
 /// Searches ~/.dioscuri/browser/{my_path_to_file} by extracting my_path_to_file
 /// The filepath must only exist within the browser/ folder for security concerns
 async fn get_resource(Path(filepath): Path<String>) -> impl IntoResponse {
-    println!("Requested resouce: {}", filepath);
     // get the resource directory first
     let parent_dir = get_resource_dir();
     let resource_path = parent_dir.join(filepath);
