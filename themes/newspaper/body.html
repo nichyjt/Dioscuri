@@ -1,0 +1,26 @@
+<body theme="dark">
+    <div class="wrapper">
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <h1 style="width: fit-content; margin-bottom: 0;">Dioscuri, a Gemini client.</h1>
+            <div id="darkModeToggle" role="button"></div>
+        </div>
+        <div style="display: flex; align-items: baseline;">
+            <p>
+                <a href="/">Back to Home</a>
+            </p>
+            &nbsp;
+            <p style="margin: 1rem 0.25rem 0 0;">| Have a place in mind?</p>
+            <form style="margin: 0;" id="addressbar" action="/">
+                <input type="text" name="address" placeholder="gemini://your-address.net/" required>
+                <button type="submit">Go</button>
+            </form>
+        </div>
+        <hr>
+        <Dioscuri/>
+        <h3>
+            <DioscuriPrompt/>
+        </h3>
+        <DioscuriInput/>
+        <hr>
+    </div>
+</body>

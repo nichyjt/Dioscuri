@@ -1,0 +1,27 @@
+<head>
+    <link href="https://fonts.cdnfonts.com/css/steamflixsans" rel="stylesheet">
+    <link href="/.src/style.css" rel="stylesheet">
+    <script src="/.src/addressbar.js"></script> 
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const toggleButton = document.getElementById('darkModeToggle');
+            const body = document.body;
+
+            function setTheme(theme) {
+                body.setAttribute('theme', theme);
+                localStorage.setItem('theme', theme);
+                toggleButton.textContent = theme === 'dark' ? '🌙 Mode' : '🌞 Mode';
+            }
+
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            setTheme(savedTheme);
+
+            toggleButton.addEventListener('click', () => {
+                const currentTheme = body.getAttribute('theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                setTheme(newTheme);
+            });
+        });
+    </script>
+
+</head>
